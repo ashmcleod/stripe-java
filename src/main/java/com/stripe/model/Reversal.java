@@ -22,7 +22,9 @@ public class Reversal extends ApiResource implements MetadataStore<Transfer>, Ha
       ExpandableField<BalanceTransaction> balanceTransaction;
   Long created;
   String currency;
+  String destinationPaymentRefund;
   @Getter(onMethod = @__({@Override})) Map<String, String> metadata;
+  String sourceRefund;
   @Getter(AccessLevel.NONE) @Setter(AccessLevel.NONE) ExpandableField<Transfer> transfer;
 
   // <editor-fold desc="balanceTransaction">
