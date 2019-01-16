@@ -15,6 +15,7 @@ public abstract class StripeObject {
       .serializeNulls()
       .setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
       .registerTypeAdapter(ExpandableField.class, new ExpandableFieldSerializer())
+      .registerTypeAdapter(Event.class, new EventTypeAdapterFactory.EventSerializer())
       .create();
 
   @Override

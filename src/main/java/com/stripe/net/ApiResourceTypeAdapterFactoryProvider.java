@@ -1,6 +1,7 @@
 package com.stripe.net;
 
 import com.google.gson.TypeAdapterFactory;
+import com.stripe.model.EventTypeAdapterFactory;
 import com.stripe.model.ExternalAccountTypeAdapterFactory;
 import java.util.ArrayList;
 import java.util.List;
@@ -14,6 +15,7 @@ final class ApiResourceTypeAdapterFactoryProvider {
 
   static {
     factories.add(new ExternalAccountTypeAdapterFactory());
+    factories.add(new EventTypeAdapterFactory());
   }
 
   public static List<TypeAdapterFactory> getAll() {
