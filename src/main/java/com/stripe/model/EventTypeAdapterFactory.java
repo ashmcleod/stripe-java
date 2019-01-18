@@ -7,7 +7,7 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import com.google.gson.JsonParseException;
+import com.google.gson.JsonPrimitive;
 import com.google.gson.JsonSerializationContext;
 import com.google.gson.JsonSerializer;
 import com.google.gson.TypeAdapter;
@@ -20,9 +20,8 @@ import java.lang.reflect.Type;
 
 public class EventTypeAdapterFactory implements TypeAdapterFactory {
 
-  private static final Gson GSON_EVENT = new GsonBuilder()
+  private static final Gson GSON_SKIP_EVENT_DATA = new GsonBuilder()
       .setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
-      // excludes `data` field during automatic deserialization because we have custom handling
       .setExclusionStrategies(new ExcludeEventDataFieldStrategy())
       .create();
 
@@ -32,6 +31,8 @@ public class EventTypeAdapterFactory implements TypeAdapterFactory {
     }
 
     public boolean shouldSkipField(FieldAttributes f) {
+      // skip `EventData` serialization, to allow for custom mapping the data
+      // into its original JSON response shape
       return (f.getDeclaringClass() == Event.class && f.getName().equals("data"));
     }
   }
@@ -39,21 +40,19 @@ public class EventTypeAdapterFactory implements TypeAdapterFactory {
   public static class EventSerializer implements JsonSerializer<Event> {
     @Override
     public JsonElement serialize(Event event, Type typeOfSrc, JsonSerializationContext context) {
+      // when mapping versioned data back to JSON, we select only the original fields and ignore
+      // the augmented fields we added during deserialization or during the object lifetime.
+      EventData data = event.getData();
+      JsonObject eventDataJson = new JsonObject();
+      eventDataJson.add("object", data.getRawJson());
+      eventDataJson.add("previous_attributes",
+          GSON_SKIP_EVENT_DATA.toJsonTree(event.getData().getPreviousAttributes()));
 
-      // get event data from different read modes
-      JsonElement rawEventData;
-      if (event.isReadDataFailure()) {
-        rawEventData = event.rawReadDataOnFailure();
-      } else if (event.canSafeReadData()) {
-        rawEventData = context.serialize(event.safeReadData());
-      } else {
-        rawEventData = context.serialize(event.bestAttemptReadData());
-      }
-
-      // serialized content here has no `data` field due to the exclusion strategy
-      JsonObject serialized =  GSON_EVENT.toJsonTree(event, typeOfSrc).getAsJsonObject();
-      serialized.add("data", rawEventData);
-      return serialized;
+      // serialize the event object except for the `data` field which we have custom handling
+      JsonObject rootEventJson = GSON_SKIP_EVENT_DATA.toJsonTree(event, typeOfSrc)
+          .getAsJsonObject();
+      rootEventJson.add("data", eventDataJson);
+      return rootEventJson;
     }
   }
 
@@ -63,11 +62,12 @@ public class EventTypeAdapterFactory implements TypeAdapterFactory {
     if (!Event.class.isAssignableFrom(type.getRawType())) {
       return null;
     }
-
     final TypeAdapter<Event> eventTypeAdapter =
         gson.getDelegateAdapter(this, TypeToken.get(Event.class));
-    final TypeAdapter<JsonElement> jsonElementAdapter = gson.getAdapter(JsonElement.class);
-    final TypeAdapter<EventData> eventDataAdapter = gson.getAdapter(EventData.class);
+    final TypeAdapter<JsonElement> jsonElementAdapter =
+        gson.getAdapter(JsonElement.class);
+    final TypeAdapter<EventData> eventDataAdapter =
+        gson.getAdapter(EventData.class);
 
     TypeAdapter<Event> resultCustomTypeAdapter =
         new TypeAdapter<Event>() {
@@ -78,32 +78,23 @@ public class EventTypeAdapterFactory implements TypeAdapterFactory {
 
           @Override
           public Event read(JsonReader in) throws IOException {
-            JsonObject eventJsonObject = jsonElementAdapter.read(in).getAsJsonObject();
+            JsonObject rootEventJsonObject = jsonElementAdapter.read(in).getAsJsonObject();
 
-            JsonObject eventDataJsonObject = eventJsonObject.getAsJsonObject("data");
-            eventJsonObject.remove("data");
-            // event starts without event data, to be set later depending on data deserialization
-            Event event = eventTypeAdapter.fromJsonTree(eventJsonObject);
+            JsonObject eventDataJsonObject = rootEventJsonObject.getAsJsonObject("data");
+            // remove data from root, and we handle deserialization separately
+            rootEventJsonObject.remove("data");
 
-            TolerantRead<EventData> tolerantRead = new TolerantRead<>();
+            Event event = eventTypeAdapter.fromJsonTree(rootEventJsonObject);
 
-            if (eventDataJsonObject == null) {
-              // no data set
-            } else if (event.canSafeReadData()) {
-              // when version matches, parsing exception should fail loudly
-              EventData safeEventData = eventDataAdapter.fromJsonTree(eventDataJsonObject);
-              tolerantRead.setSafeData(safeEventData);
-            } else {
-              // otherwise, we can afford handle parsing exception
-              try {
-                EventData bestAttemptEventData = eventDataAdapter.fromJsonTree(eventDataJsonObject);
-                tolerantRead.setBestAttemptData(bestAttemptEventData);
-              } catch (JsonParseException e) {
-                tolerantRead.setRawDataOnFailure(eventDataJsonObject);
-                tolerantRead.setReadException(e);
+            if (eventDataJsonObject != null) {
+              if (event.getApiVersion() != null) {
+                // motivation for deserializing event data from its root event object:
+                // we want the event data to know which api version it is tagged with.
+                eventDataJsonObject.add("api_version", new JsonPrimitive(event.getApiVersion()));
               }
+              EventData eventData = eventDataAdapter.fromJsonTree(eventDataJsonObject);
+              event.setData(eventData);
             }
-            event.setData(tolerantRead);
 
             return event;
           }

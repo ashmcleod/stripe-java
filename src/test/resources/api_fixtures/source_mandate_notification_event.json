@@ -4,6 +4,7 @@
   "id":"evt_123",
   "type":"source.mandate_notification",
   "object":"event",
+  "api_version": "2018-05-21",
   "data":{
     "object":{
       "id": "srcmn_123",

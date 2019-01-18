@@ -9,6 +9,7 @@ import com.stripe.net.ApiResource;
 import java.util.Map;
 
 import org.junit.Test;
+import org.mockito.Mockito;
 
 public class SourceMandateNotificationTest extends BaseStripeTest {
   private void verifyResource(SourceMandateNotification mandateNotification) {
@@ -45,8 +46,11 @@ public class SourceMandateNotificationTest extends BaseStripeTest {
     final String json = getResourceAsString("/api_fixtures/source_mandate_notification_event.json");
     final Event event = ApiResource.GSON.fromJson(json, Event.class);
 
+    EventData data = Mockito.spy(event.getData());
+    Mockito.doReturn("2018-05-21").when(data).getIntegrationApiVersion();
+
     final SourceMandateNotification mandateNotification
-        = (SourceMandateNotification) event.getData().getObject();
+        = (SourceMandateNotification) data.getObject();
 
     verifyResource(mandateNotification);
   }

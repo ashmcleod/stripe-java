@@ -22,6 +22,16 @@
       "transform_usage": null,
       "trial_period_days": null,
       "usage_type": "licensed"
+    },
+    "previous_attributes": {
+      "foo_number": 123,
+      "foo_boolean": false,
+      "foo_null": null,
+      "foo_string": "foo",
+      "foo_hash": {
+        "foo_inner": "foo_inner"
+      },
+      "foo_array": ["foo", "bar"]
     }
   },
   "id": "evt_123",

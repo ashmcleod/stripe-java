@@ -7,8 +7,6 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParseException;
 import com.google.gson.JsonPrimitive;
-import com.stripe.net.ApiResource;
-
 import java.lang.reflect.Type;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -69,29 +67,29 @@ public class EventDataDeserializer implements JsonDeserializer<EventData> {
    * {@link EventData} instance.
    */
   @Override
-  public EventData deserialize(JsonElement json, Type typeOfT, JsonDeserializationContext context)
+  public EventData deserialize(JsonElement json, Type typeOfT,
+                               JsonDeserializationContext context)
       throws JsonParseException {
-    EventData eventData = new EventData();
+    Map<String, Object> previousAttributes = null;
+    JsonElement rawJson = null;
+    String apiVersion = null;
+
     JsonObject jsonObject = json.getAsJsonObject();
     for (Map.Entry<String, JsonElement> entry : jsonObject.entrySet()) {
       String key = entry.getKey();
       JsonElement element = entry.getValue();
       if ("previous_attributes".equals(key)) {
-        if (element.isJsonNull()) {
-          eventData.setPreviousAttributes(null);
-        } else if (element.isJsonObject()) {
-          Map<String, Object> previousAttributes = new HashMap<>();
+        if (element.isJsonObject()) {
+          previousAttributes = new HashMap<>();
           populateMapFromJsonObject(previousAttributes, element.getAsJsonObject());
-          eventData.setPreviousAttributes(previousAttributes);
         }
       } else if ("object".equals(key)) {
-        String type = element.getAsJsonObject().get("object").getAsString();
-        Class<? extends StripeObject> cl = EventDataClassLookup.findClass(type);
-        StripeObject object = ApiResource.GSON.fromJson(
-            entry.getValue(), cl != null ? cl : StripeRawJsonObject.class);
-        eventData.setObject(object);
+        // deserialization to `StripeObject` is done in the event data itself.
+        rawJson = entry.getValue();
+      } else if ("api_version".equals(key)) {
+        apiVersion =  entry.getValue().getAsString();
       }
     }
-    return eventData;
+    return new EventData(rawJson, previousAttributes, apiVersion);
   }
 }
